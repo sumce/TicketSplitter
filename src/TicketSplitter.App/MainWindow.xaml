@@ -31,18 +31,19 @@
                 <Border Style="{StaticResource PillStyle}">
                     <TextBlock Text="{x:Bind ViewModel.SourceMeta, Mode=OneWay}" FontSize="11" Opacity="0.8" />
                 </Border>
-                <Border Style="{StaticResource PillStyle}">
+                <Border Style="{StaticResource PillStyle}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.LayoutTooltip, Mode=OneWay}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE7C3;" FontSize="11"
-                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                        <FontIcon Glyph="{x:Bind ViewModel.LayoutGlyph, Mode=OneWay}" FontSize="11"
+                                  Foreground="{x:Bind ViewModel.LayoutBrush, Mode=OneWay}" />
                         <TextBlock Text="{x:Bind ViewModel.LayoutShort, Mode=OneWay}" FontSize="11" />
                     </StackPanel>
                 </Border>
                 <ComboBox SelectedIndex="{x:Bind ViewModel.LayoutModeIndex, Mode=TwoWay}"
                           MinWidth="104" VerticalAlignment="Center">
                     <ComboBoxItem Content="自动识别" />
-                    <ComboBoxItem Content="按半幅" />
-                    <ComboBoxItem Content="按整版" />
+                    <ComboBoxItem Content="不拆分（每页一张）" />
+                    <ComboBoxItem Content="拆左右（每页两张）" />
                 </ComboBox>
             </StackPanel>
 

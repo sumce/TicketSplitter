@@ -57,6 +57,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _sourceName = string.Empty;
     [ObservableProperty] private string _sourceMeta = string.Empty;
     [ObservableProperty] private string _layoutShort = string.Empty;
+    [ObservableProperty] private string _layoutTooltip = string.Empty;
+    [ObservableProperty] private string _layoutGlyph = "\uE946";
+    [ObservableProperty] private Brush? _layoutBrush;
     [ObservableProperty] private string _selectedPageLabel = "未选中页面";
     [ObservableProperty] private bool _canEditBoundary;
     [ObservableProperty] private string _layoutLabel = string.Empty;
@@ -383,9 +386,25 @@ public partial class MainViewModel : ObservableObject
             HasSource = true;
 
             await PrepareWorkingPdfAsync(path, analysis, ct);
-            LayoutShort = _workingPageCount != _sourcePageCount
-                ? $"整版 → 拆半幅（{_workingPageCount} 页）"
-                : $"半幅（{_workingPageCount} 页）";
+
+            var mixed = analysis.Layout == PdfLayout.Mixed && LayoutModeIndex == 0;
+            var split = _workingPageCount != _sourcePageCount;
+
+            LayoutShort = mixed
+                ? "版式混杂 · 请确认"
+                : split
+                    ? $"每页 2 张票 → 拆成 {_workingPageCount} 页"
+                    : $"每页 1 张票 · {_workingPageCount} 页";
+
+            LayoutGlyph = mixed ? "\uE7BA" : "\uE946";
+            LayoutBrush = new SolidColorBrush(mixed
+                ? ColorHelper.FromArgb(255, 157, 93, 0)
+                : ColorHelper.FromArgb(255, 0, 95, 184));
+
+            var tip = $"{analysis.Label}\n{analysis.Detail}";
+            if (analysis.Notes.Count > 0) tip += "\n\n" + string.Join("\n", analysis.Notes);
+            tip += "\n\n版式只影响切票前的分页：每页两张票时需要先拆成左右两页。";
+            LayoutTooltip = tip;
 
             Tickets.Clear();
             WarningList.Clear();
