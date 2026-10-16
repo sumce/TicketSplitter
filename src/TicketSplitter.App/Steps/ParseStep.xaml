@@ -1,7 +1,8 @@
 <UserControl
     x:Class="TicketSplitter.App.Steps.ParseStep"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:TicketSplitter.App.Steps">
     <Grid RowDefinitions="Auto,*" RowSpacing="14">
 
         <StackPanel Grid.Row="0" Spacing="3">
@@ -15,59 +16,7 @@
             <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="12" MaxWidth="860" HorizontalAlignment="Left">
 
-                    <Border Style="{StaticResource CardStyle}" Padding="16">
-                        <StackPanel Spacing="10">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Text="分块解析" Style="{StaticResource PanelTitleStyle}" />
-                                <Button Grid.Column="1" Content="恢复自动分块" FontSize="11" Padding="8,2"
-                                        Command="{Binding ResetChunksCommand}"
-                                        Visibility="{Binding NeedsChunking, Converter={StaticResource BoolToVis}}" />
-                            </Grid>
-
-                            <TextBlock Text="{Binding ChunkSummary}" TextWrapping="Wrap" FontSize="12.5" />
-
-                            <ItemsControl ItemsSource="{Binding Chunks}"
-                                          Visibility="{Binding NeedsChunking, Converter={StaticResource BoolToVis}}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border BorderThickness="0,0,0,1" Padding="10,8"
-                                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
-                                            <Grid ColumnSpacing="10" ColumnDefinitions="Auto,150,Auto,*,Auto,Auto">
-                                                <TextBlock Grid.Column="0" Text="{Binding Title}" FontSize="12"
-                                                           FontWeight="SemiBold" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Range}" FontSize="12"
-                                                           VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="2" Text="{Binding PageCountText}"
-                                                           FontSize="12" Opacity="0.65" VerticalAlignment="Center" />
-                                                <Button Grid.Column="4" Content="再切一刀" FontSize="11" Padding="8,2"
-                                                        Click="OnSplitChunkClick" Tag="{Binding}" />
-                                                <Button Grid.Column="5" Content="与下一块合并" FontSize="11" Padding="8,2"
-                                                        Click="OnMergeChunkClick" Tag="{Binding}"
-                                                        IsEnabled="{Binding CanMerge}" />
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-
-                            <InfoBar IsOpen="{Binding HasChunkProblems}" IsClosable="False" Severity="Error"
-                                     Title="切点有问题，请调整">
-                                <InfoBar.Content>
-                                    <ItemsControl ItemsSource="{Binding ChunkProblems}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap"
-                                                           Margin="0,0,0,3" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </InfoBar.Content>
-                            </InfoBar>
-
-                            <TextBlock Style="{StaticResource CaptionStyle}"
-                                       Text="切点落在一张票中间也不影响结果：各块的识别结果会按页号偏移合并后再切票。留在这里只是为了让你按业务上的一批票来分块。" />
-                        </StackPanel>
-                    </Border>
+                    <local:ChunkPlanPanel />
 
                     <Border Style="{StaticResource CardStyle}" Padding="16">
                         <StackPanel Spacing="12">

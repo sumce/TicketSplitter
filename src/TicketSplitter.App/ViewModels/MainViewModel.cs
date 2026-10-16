@@ -40,6 +40,7 @@ public partial class MainViewModel : ObservableObject
 
     private CancellationTokenSource? _cts;
     private PageThumbnailRenderer? _renderer;
+    private readonly Dictionary<int, BitmapImage> _thumbCache = [];
 
     private LayoutAnalysis? _analysis;
     private int _sourcePageCount;
@@ -253,6 +254,7 @@ public partial class MainViewModel : ObservableObject
         {
             case WorkflowStep.Layout: _ = RefreshPreviewAsync(); break;
             case WorkflowStep.Split: _ = ApplyStyleAsync(); break;
+            case WorkflowStep.Parse: _ = RenderBoundaryPreviewsAsync(); break;
         }
     }
 
@@ -409,6 +411,7 @@ public partial class MainViewModel : ObservableObject
                 EndPage = b.EndPageExclusive,
                 OverLimit = b.PageCount > MaxPagesPerChunk,
                 CanMerge = i < boundaries.Count - 1,
+                HasBoundary = i < boundaries.Count - 1,
             });
         }
 
@@ -422,6 +425,8 @@ public partial class MainViewModel : ObservableObject
             ChunkProblems.Add(p);
 
         HasChunkProblems = ChunkProblems.Count > 0;
+
+        _ = RenderBoundaryPreviewsAsync();
     }
 
     [RelayCommand]
@@ -683,8 +688,7 @@ public partial class MainViewModel : ObservableObject
             _workingPageCount = 0;
             SelectedTicket = null;
             SelectedPage = null;
-            _renderer?.Dispose();
-            _renderer = null;
+            ResetRenderer();
             Pages.Clear();
 
             BuildStyles();                 // 会选中推荐样式并触发预览
@@ -871,28 +875,103 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private async Task StartThumbnailRenderAsync(CancellationToken ct)
+    private async Task EnsureRendererAsync()
+    {
+        if (_renderer is not null || _workingPdf is null || !File.Exists(_workingPdf)) return;
+        try { _renderer = await PageThumbnailRenderer.LoadAsync(_workingPdf); }
+        catch (Exception) { _renderer = null; }
+    }
+
+    /// <summary>带缓存地渲染某一页，分块预览与结果复核共用同一份。</summary>
+    private async Task<BitmapImage?> GetThumbAsync(int pageIndex, int width, CancellationToken ct = default)
+    {
+        if (_thumbCache.TryGetValue(pageIndex, out var cached)) return cached;
+        await EnsureRendererAsync();
+        if (_renderer is null || pageIndex < 0 || pageIndex >= _workingPageCount) return null;
+
+        var bmp = await _renderer.RenderAsync(pageIndex, width, ct);
+        if (bmp is not null) _thumbCache[pageIndex] = bmp;
+        return bmp;
+    }
+
+    private void ResetRenderer()
     {
         _renderer?.Dispose();
         _renderer = null;
+        _thumbCache.Clear();
+    }
+
+    private async Task StartThumbnailRenderAsync(CancellationToken ct)
+    {
         Pages.Clear();
         for (var i = 0; i < _workingPageCount; i++) Pages.Add(new PageThumbViewModel(i));
         PaintPageBadges();
 
-        if (_workingPdf is null) return;
-
         try
         {
-            _renderer = await PageThumbnailRenderer.LoadAsync(_workingPdf);
             for (var i = 0; i < Pages.Count; i++)
             {
                 if (ct.IsCancellationRequested) return;
-                var bmp = await _renderer.RenderAsync(i, 150, ct);
-                if (bmp is not null) Pages[i].Thumbnail = bmp;
+                Pages[i].Thumbnail = await GetThumbAsync(i, 150, ct);
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception) { }
+    }
+
+    /// <summary>
+    /// 渲染每个切点前后各几页。用户在看不到页面的情况下没法判断"哪页是票尾"，
+    /// 所以这里必须把切点附近的页摊出来给他点。
+    /// </summary>
+    private async Task RenderBoundaryPreviewsAsync()
+    {
+        if (_workingPageCount <= 0 || Chunks.Count == 0) return;
+
+        try
+        {
+            await EnsureRendererAsync();
+            foreach (var row in Chunks)
+            {
+                row.BoundaryPages.Clear();
+                if (!row.HasBoundary) continue;
+
+                const int around = 5;
+                var from = Math.Max(0, row.EndPage - around);
+                var to = Math.Min(_workingPageCount, row.EndPage + around - 1);
+
+                for (var i = from; i < to; i++)
+                {
+                    var page = new PageThumbViewModel(i)
+                    {
+                        OwnerChunkIndex = row.Index - 1,
+                        IsBoundary = i == row.EndPage - 1,
+                        IsInNextChunk = i >= row.EndPage,
+                    };
+                    row.BoundaryPages.Add(page);
+                    page.Thumbnail = await GetThumbAsync(i, 120);
+                }
+            }
+        }
+        catch (Exception) { }
+    }
+
+    /// <summary>把某个块的切点挪到指定页之后（分块预览里点页面触发）。</summary>
+    public void MoveBoundaryTo(PageThumbViewModel page)
+    {
+        var i = page.OwnerChunkIndex;
+        if (i < 0 || i >= _chunkEnds.Count - 1) return;
+
+        var prevEnd = i == 0 ? 0 : _chunkEnds[i - 1];
+        var nextEnd = _chunkEnds[i + 1];
+        var wanted = page.PageIndex + 1;
+        var allowed = Math.Clamp(wanted, prevEnd + 1, nextEnd - 1);
+
+        _chunkEnds[i] = allowed;
+        RebuildChunks();
+
+        StatusText = allowed == wanted
+            ? $"块 {i + 1} 的切点已挪到第 {allowed} 页之后"
+            : $"切点最多挪到第 {allowed} 页 —— 再往前会让相邻的块没有页面";
     }
 
     private void ApplyTickets(List<Ticket> tickets)
