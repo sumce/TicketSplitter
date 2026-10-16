@@ -96,10 +96,26 @@ public sealed partial class ReviewStep : UserControl
             IsChecked = Vm.CleanOutput,
         };
 
-        var panel = new StackPanel { Spacing = 12, Width = 480 };
+        var twoUp = new CheckBox
+        {
+            Content = "同时生成双页合并版（每张票左右并排，A4 横版）",
+            IsChecked = Vm.AlsoTwoUp,
+        };
+        var twoUpHint = new TextBlock
+        {
+            Text = "输出到「双页合并」子目录，一张票按左右两张排一面，奇数页的最后一面右半留空。",
+            FontSize = 12,
+            Opacity = 0.65,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(28, -6, 0, 0),
+        };
+
+        var panel = new StackPanel { Spacing = 12, Width = 500 };
         panel.Children.Add(summary);
         panel.Children.Add(dirRow);
         panel.Children.Add(clean);
+        panel.Children.Add(twoUp);
+        panel.Children.Add(twoUpHint);
 
         var dialog = new ContentDialog
         {
@@ -115,6 +131,7 @@ public sealed partial class ReviewStep : UserControl
 
         Vm.OutputDir = dirBox.Text;
         Vm.CleanOutput = clean.IsChecked == true;
+        Vm.AlsoTwoUp = twoUp.IsChecked == true;
         await Vm.ExportCommand.ExecuteAsync(null);
     }
 }

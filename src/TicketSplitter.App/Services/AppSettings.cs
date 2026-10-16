@@ -28,6 +28,9 @@ public sealed class AppSettings
     /// <summary>用户自己添加的样式。</summary>
     [JsonPropertyName("customStyles")] public List<StyleRecord> CustomStyles { get; set; } = [];
 
+    /// <summary>导出时是否同时生成双页合并版。</summary>
+    [JsonPropertyName("alsoTwoUp")] public bool AlsoTwoUp { get; set; }
+
     /// <summary>最近提交过的文件。</summary>
     [JsonPropertyName("recentFiles")] public List<string> RecentFiles { get; set; } = [];
 

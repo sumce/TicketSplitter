@@ -10,6 +10,14 @@ public sealed record ArchiveOptions
     public bool Clean { get; init; }
 
     public bool WriteCsv { get; init; } = true;
+
+    /// <summary>额外输出一份「双页合并」：每张票的页面按左右两张排成 A4 横版。</summary>
+    public bool AlsoTwoUp { get; init; }
+
+    /// <summary>双页合并输出的子目录名。</summary>
+    public string TwoUpFolderName { get; init; } = "双页合并";
+
+    public TwoUpOptions TwoUp { get; init; } = new();
 }
 
 public sealed record ArchiveRow(
@@ -63,6 +71,13 @@ public static class TicketArchiveWriter
             source.WriteRange(t.StartPage, t.EndPage, full);
             totalBytes += new FileInfo(full).Length;
 
+            if (options.AlsoTwoUp)
+            {
+                var twoUpPath = Path.Combine(outputRoot, options.TwoUpFolderName, relative);
+                TwoUpImposer.Impose(full, twoUpPath, options.TwoUp);
+                totalBytes += new FileInfo(twoUpPath).Length;
+            }
+
             rows.Add(new ArchiveRow(t.Index, t.Type, t.Area, t.Time ?? "",
                 t.StartPage1Based, t.EndPage, t.PageCount, relative));
 
@@ -88,6 +103,9 @@ public static class TicketArchiveWriter
 
         var csv = Path.Combine(outputRoot, "作业票清单.csv");
         if (File.Exists(csv)) File.Delete(csv);
+
+        var twoUp = Path.Combine(outputRoot, new ArchiveOptions().TwoUpFolderName);
+        if (Directory.Exists(twoUp)) Directory.Delete(twoUp, recursive: true);
     }
 
     /// <summary>UTF-8 with BOM，与老流水线的 utf-8-sig 一致（Excel 直接双击不乱码）。</summary>

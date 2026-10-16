@@ -23,6 +23,10 @@ dotnet build TicketSplitter.slnx -c Release -v q --nologo
 
 Write-Host '=== 2/5 发布主程序 ==='
 Remove-Item $buildDir -Recurse -Force -ErrorAction SilentlyContinue
+# App 项目曾被 MSBuild 误判为"已是最新"而跳过编译，结果打出来的包是旧代码
+# （编译报成功但产物时间戳没变）。发布前删掉 obj/bin 强制全量重建。
+Remove-Item (Join-Path $root 'src\TicketSplitter.App\obj') -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $root 'src\TicketSplitter.App\bin') -Recurse -Force -ErrorAction SilentlyContinue
 dotnet publish src\TicketSplitter.App\TicketSplitter.App.csproj -c Release -r win-x64 --self-contained true -p:WindowsAppSDKSelfContained=true -p:DebugType=none -o build\app --nologo -v q
 
 Write-Host '=== 3/5 打包内嵌负载 ==='
@@ -37,6 +41,15 @@ Remove-Item (Join-Path $launcher 'obj') -Recurse -Force -ErrorAction SilentlyCon
 dotnet publish src\TicketSplitter.Launcher\TicketSplitter.Launcher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o dist --nologo -v q
 
 Write-Host '=== 5/5 结果 ==='
+# 自检：主程序产物必须比源文件新，否则说明又用了旧对象
+$dll = Join-Path $appOut 'TicketSplitter.dll'
+$newestSrc = Get-ChildItem (Join-Path $root 'src') -Recurse -Include *.cs,*.xaml |
+             Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' } |
+             Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ((Test-Path $dll) -and ((Get-Item $dll).LastWriteTime -lt $newestSrc.LastWriteTime)) {
+    throw ('构建自检失败：产物 ' + (Get-Item $dll).LastWriteTime + ' 早于源文件 ' + $newestSrc.LastWriteTime + '（用的是旧对象）')
+}
+Write-Host ('  自检通过：产物 ' + (Get-Item $dll).LastWriteTime.ToString('HH:mm:ss') + ' >= 最新源 ' + $newestSrc.LastWriteTime.ToString('HH:mm:ss'))
 Get-ChildItem $dist -Recurse -File | ForEach-Object { Write-Host ('  ' + $_.Name + '  ' + [math]::Round($_.Length / 1MB, 1) + ' MB') }
 Copy-Item "$root\docs\使用说明.txt" $dist -Force
 Write-Host '完成。'

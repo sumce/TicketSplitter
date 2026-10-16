@@ -60,6 +60,7 @@ public partial class MainViewModel : ObservableObject
         Token = _settings.ReadToken() ?? Environment.GetEnvironmentVariable("MINERU_TOKEN") ?? string.Empty;
         ReuseExistingParse = _settings.ReuseExistingParse;
         OutputDir = _settings.LastOutputDir ?? string.Empty;
+        AlsoTwoUp = _settings.AlsoTwoUp;
 
         foreach (var f in _settings.RecentFiles.Where(File.Exists).Take(5))
             RecentFiles.Add(new RecentFileViewModel(f));
@@ -184,6 +185,9 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty] private string _outputDir = string.Empty;
     [ObservableProperty] private bool _cleanOutput = true;
+
+    /// <summary>是否额外输出「双页合并」：每张票左右并排排成 A4 横版。</summary>
+    [ObservableProperty] private bool _alsoTwoUp;
     [ObservableProperty] private string _lastExportInfo = string.Empty;
     [ObservableProperty] private bool _hasExport;
 
@@ -193,6 +197,12 @@ public partial class MainViewModel : ObservableObject
     {
         // 一直是持久化的：用 DPAPI 加密后写入本机，只有失效时才清掉
         _settings.WriteToken(value);
+        _settings.Save();
+    }
+
+    partial void OnAlsoTwoUpChanged(bool value)
+    {
+        _settings.AlsoTwoUp = value;
         _settings.Save();
     }
 
@@ -537,13 +547,14 @@ public partial class MainViewModel : ObservableObject
             {
                 using var source = PdfSource.Open(writtenFrom);
                 return TicketArchiveWriter.Write(source, tickets, outDir,
-                    new ArchiveOptions { Clean = CleanOutput }, progress, _cts.Token);
+                    new ArchiveOptions { Clean = CleanOutput, AlsoTwoUp = AlsoTwoUp }, progress, _cts.Token);
             }, _cts.Token);
 
             _settings.LastOutputDir = outDir;
             _settings.Save();
 
-            LastExportInfo = $"已导出 {result.Rows.Count} 张票 · {result.TotalBytes / 1048576.0:F1} MB\n{result.CsvPath}";
+            var extra = AlsoTwoUp ? "（含双页合并版）" : string.Empty;
+            LastExportInfo = $"已导出 {result.Rows.Count} 张票{extra} · {result.TotalBytes / 1048576.0:F1} MB\n{result.CsvPath}";
             HasExport = true;
             StatusText = "导出完成";
         }
