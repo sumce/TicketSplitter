@@ -12,3 +12,11 @@ public sealed class MineruTransientException : MineruException
     public MineruTransientException(string message) : base(message) { }
     public MineruTransientException(string message, Exception inner) : base(message, inner) { }
 }
+
+/// <summary>
+/// Token 无效或已失效。重试没有意义，UI 收到它应当把本机保存的 Token 清掉并要求重新填写。
+/// </summary>
+public sealed class MineruAuthException : MineruException
+{
+    public MineruAuthException(string message) : base(message) { }
+}

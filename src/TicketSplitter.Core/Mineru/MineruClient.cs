@@ -208,8 +208,7 @@ public sealed class MineruClient : IDisposable
         request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
 
         var json = await SendJsonAsync(request, ct).ConfigureAwait(false);
-        if (json["code"]?.GetValue<int>() != 0)
-            throw new MineruTransientException($"申请上传链接失败：[{json["code"]}] {json["msg"]}");
+        ThrowIfFailed(json, "申请上传链接失败");
 
         var data = json["data"]!;
         var batchId = data["batch_id"]?.GetValue<string>()
@@ -259,8 +258,7 @@ public sealed class MineruClient : IDisposable
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.Token);
 
             var json = await SendJsonAsync(request, ct).ConfigureAwait(false);
-            if (json["code"]?.GetValue<int>() != 0)
-                throw new MineruTransientException($"查询解析状态失败：[{json["code"]}] {json["msg"]}");
+            ThrowIfFailed(json, "查询解析状态失败");
 
             var item = json["data"]?["extract_result"]?.AsArray().FirstOrDefault()
                 ?? throw new MineruTransientException("返回里没有 extract_result");
@@ -339,6 +337,46 @@ public sealed class MineruClient : IDisposable
         }
     }
 
+    /// <summary>把 code != 0 的响应分成「鉴权失败」和「可重试」两类。</summary>
+    private static void ThrowIfFailed(JsonNode json, string prefix)
+    {
+        var code = CodeOf(json);
+        if (code.Length == 0 || code == "0") return;
+
+        var msg = MessageOf(json);
+        if (LooksLikeAuthFailure(code, msg))
+            throw new MineruAuthException($"Token 无效或已失效：[{code}] {msg}");
+        throw new MineruTransientException($"{prefix}：[{code}] {msg}");
+    }
+
+    /// <summary>code 可能是数字也可能是字符串，统一取成字符串。</summary>
+    private static string CodeOf(JsonNode json)
+    {
+        var node = json["code"];
+        if (node is null) return string.Empty;
+        if (node is JsonValue v)
+        {
+            if (v.TryGetValue<int>(out var i)) return i.ToString();
+            if (v.TryGetValue<long>(out var l)) return l.ToString();
+            if (v.TryGetValue<string>(out var s)) return s ?? string.Empty;
+        }
+        return node.ToJsonString().Trim('"');
+    }
+
+    private static string MessageOf(JsonNode json) => json["msg"] switch
+    {
+        null => string.Empty,
+        JsonValue v when v.TryGetValue<string>(out var s) => s ?? string.Empty,
+        var other => other.ToJsonString().Trim('"'),
+    };
+
+    private static bool LooksLikeAuthFailure(string code, string message) =>
+        code is "A0202" or "A0211" or "A0212" or "A0213" or "-401" or "-403"
+        || message.Contains("token", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("认证", StringComparison.Ordinal)
+        || message.Contains("授权", StringComparison.Ordinal)
+        || message.Contains("unauthorized", StringComparison.OrdinalIgnoreCase);
+
     private async Task<JsonNode> SendJsonAsync(HttpRequestMessage request, CancellationToken ct)
     {
         try
@@ -348,7 +386,7 @@ public sealed class MineruClient : IDisposable
                 throw new MineruTransientException($"服务端错误 HTTP {(int)response.StatusCode}");
             if (response.StatusCode == HttpStatusCode.Unauthorized ||
                 response.StatusCode == HttpStatusCode.Forbidden)
-                throw new MineruException("Token 无效或已失效（HTTP 401/403），请更换 Token。");
+                throw new MineruAuthException($"Token 无效或已失效（HTTP {(int)response.StatusCode}），请重新填写。");
             if (!response.IsSuccessStatusCode)
                 throw new MineruException($"请求失败：HTTP {(int)response.StatusCode}");
 

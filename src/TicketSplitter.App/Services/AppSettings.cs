@@ -23,7 +23,6 @@ public sealed class AppSettings
     [JsonPropertyName("protectedToken")] public string? ProtectedToken { get; set; }
     [JsonPropertyName("lastSourcePath")] public string? LastSourcePath { get; set; }
     [JsonPropertyName("lastOutputDir")] public string? LastOutputDir { get; set; }
-    [JsonPropertyName("rememberToken")] public bool RememberToken { get; set; }
     [JsonPropertyName("reuseExistingParse")] public bool ReuseExistingParse { get; set; }
 
     /// <summary>用户自己添加的样式。</summary>

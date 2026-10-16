@@ -55,8 +55,8 @@ public partial class MainViewModel : ObservableObject
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         _settings = AppSettings.Load();
 
+        // Token 一直保存，不存在"本次是否记住"这种选择
         Token = _settings.ReadToken() ?? Environment.GetEnvironmentVariable("MINERU_TOKEN") ?? string.Empty;
-        RememberToken = _settings.RememberToken;
         ReuseExistingParse = _settings.ReuseExistingParse;
         OutputDir = _settings.LastOutputDir ?? string.Empty;
 
@@ -157,7 +157,6 @@ public partial class MainViewModel : ObservableObject
 
     public string TokenButtonText => string.IsNullOrWhiteSpace(Token) ? "设置 Token" : "Token 已设置";
 
-    [ObservableProperty] private bool _rememberToken = true;
     [ObservableProperty] private bool _reuseExistingParse;
     [ObservableProperty] private bool _canReuseExisting;
 
@@ -189,8 +188,12 @@ public partial class MainViewModel : ObservableObject
 
     // ==================== 变更钩子 ====================
 
-    partial void OnTokenChanged(string value) => PersistToken();
-    partial void OnRememberTokenChanged(bool value) => PersistToken();
+    partial void OnTokenChanged(string value)
+    {
+        // 一直是持久化的：用 DPAPI 加密后写入本机，只有失效时才清掉
+        _settings.WriteToken(value);
+        _settings.Save();
+    }
 
     partial void OnReuseExistingParseChanged(bool value)
     {
@@ -480,6 +483,12 @@ public partial class MainViewModel : ObservableObject
                 : $"识别到 {_detected.Count} 张票";
         }
         catch (OperationCanceledException) { StatusText = "已取消"; }
+        catch (MineruAuthException ex)
+        {
+            // 失效就把本机保存的清掉，下次打开要求重新填写
+            Token = string.Empty;
+            StatusText = "Token 已失效并已从本机清除，请重新填写：" + ex.Message;
+        }
         catch (Exception ex) { StatusText = "解析失败：" + ex.Message; }
         finally
         {
@@ -597,11 +606,12 @@ public partial class MainViewModel : ObservableObject
 
     // ==================== 内部流程 ====================
 
-    private void PersistToken()
+    /// <summary>手动清除本机保存的 Token。</summary>
+    [RelayCommand]
+    private void ClearToken()
     {
-        _settings.RememberToken = RememberToken;
-        _settings.WriteToken(RememberToken ? Token : null);
-        _settings.Save();
+        Token = string.Empty;   // 触发 OnTokenChanged 把存储一并清掉
+        StatusText = "已清除本机保存的 Token";
     }
 
     private async Task LoadSourceAsync(string path)

@@ -72,10 +72,16 @@
                     <Border Style="{StaticResource CardStyle}" Padding="16">
                         <StackPanel Spacing="12">
                             <TextBlock Text="识别设置" Style="{StaticResource PanelTitleStyle}" />
-                            <PasswordBox Header="MinerU Token" Password="{Binding Token, Mode=TwoWay}"
-                                         PlaceholderText="粘贴 Token，或使用环境变量 MINERU_TOKEN" />
-                            <CheckBox Content="记住 Token（DPAPI 加密保存在本机）"
-                                      IsChecked="{Binding RememberToken, Mode=TwoWay}" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <PasswordBox Grid.Column="0" Header="MinerU Token"
+                                             Password="{Binding Token, Mode=TwoWay}"
+                                             PlaceholderText="粘贴 Token，或使用环境变量 MINERU_TOKEN" />
+                                <Button Grid.Column="1" Content="清除" VerticalAlignment="Bottom"
+                                        MinWidth="64" Command="{Binding ClearTokenCommand}"
+                                        ToolTipService.ToolTip="清掉本机保存的 Token" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource CaptionStyle}"
+                                       Text="Token 会用 DPAPI 加密一直保存在本机，下次打开自动带上；只有在失效时才会被清除并提示重新填写。" />
                             <CheckBox Content="复用已有识别结果（不联网，跳过 MinerU 调用）"
                                       IsChecked="{Binding ReuseExistingParse, Mode=TwoWay}"
                                       IsEnabled="{Binding CanReuseExisting}" />
