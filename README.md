@@ -148,7 +148,9 @@ Windows App SDK **不支持 .NET 的单文件部署**——直接 `PublishSingle
    否则默认名是 `TicketSplitter.Launcher.payload.zip`，按 `payload.zip` 取会得到 null）
 3. 启动器自己用 `PublishSingleFile` 打成**一个 exe**
 
-首次运行时释放到 `%LOCALAPPDATA%\TicketSplitter\runtime\<版本>\`（实测约 1.3 秒），
+首次运行时释放到 `%LOCALAPPDATA%\TicketSplitter\runtime\<版本-负载指纹>\`（实测约 1.3 秒），
+**目录名带负载内容的 SHA-256 指纹**：只按版本号命名的话，重新打包后版本号没变，
+启动器会认为已释放而继续用旧副本，导致界面改了用户看到的还是老版本。旧目录会自动清理。
 之后每次启动直接拉起主程序。目标机器不需要装 .NET 运行时，也不需要 Windows App Runtime。
 
 ---
