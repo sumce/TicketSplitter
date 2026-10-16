@@ -91,65 +91,45 @@ TicketSplitter.slnx
 │   │   │   └── ...
 │   │   ├── Export/                   # 归档 + CSV
 │   │   └── Pipeline/                 # 串起全链路的 SplitPipeline
-│   ├── TicketSplitter.Cli/           # 无界面命令行（便于脚本化与回归）
 │   └── TicketSplitter.App/           # WinUI 3 桌面应用
 └── tests/TicketSplitter.Core.Tests/  # 13 个测试，含真实语料黄金比对
 ```
 
-**分层原则**：所有业务逻辑在 `Core`，可以脱离 WinUI 单独测试；`App` 只负责 UI 与编排；`Cli` 复用同一套 `Core`。
+**分层原则**：所有业务逻辑在 `Core`，可以脱离 WinUI 单独测试；`App` 只负责 UI 与编排；`Launcher` 只做单文件自解压。
 
 ---
 
 ## 构建与运行
 
-需要 .NET 10 SDK 与已安装的 Windows App Runtime 1.7。
+需要 .NET 10 SDK。
 
 ```powershell
-# 全部构建
-dotnet build TicketSplitter.slnx -c Release
-
-# 跑测试（含与老流水线产出的黄金比对）
-dotnet test tests/TicketSplitter.Core.Tests
-
-# 命令行
-dotnet run --project src/TicketSplitter.Cli -- analyze "D:\path\scan.pdf"
-dotnet run --project src/TicketSplitter.Cli -- split "D:\path\scan.pdf" --out D:\out --token $env:MINERU_TOKEN
-
-# 桌面应用
+# 开发时直接跑
 dotnet build src/TicketSplitter.App
 .\src\TicketSplitter.App\bin\Debug\net10.0-windows10.0.19041.0\win-x64\TicketSplitter.exe
+
+# 跑测试
+dotnet test tests/TicketSplitter.Core.Tests
+
+# 生成可分发的单文件程序 -> dist\TicketSplitter.exe
+& .\build-release.ps1
 ```
 
-> ⚠️ WinUI 项目**必须**保持 `<EnableMsixTooling>true</EnableMsixTooling>`（同时 `WindowsPackageType=None`，仍然是非打包应用、不需要证书）。
-> 设为 `false` 会让 MSBuild 走 `MrtCore.PriGen.targets`，该目标硬编码从 Visual Studio 安装目录加载
-> `Microsoft.Build.Packaging.Pri.Tasks.dll`，dotnet CLI 下必然 `MSB4062` 构建失败，且不会产出 `resources.pri`。
-> 构建是否健康，看输出目录里有没有 `resources.pri`。
+### 分发：为什么需要一个启动器
 
-### 超过 200 页时怎么处理
+Windows App SDK **不支持 .NET 的单文件部署**——直接 `PublishSingleFile` 打出来的 exe
+会在启动时抛托管异常（`0xe0434352`）立刻退出，即使用 `IncludeAllContentForSelfExtract`
+把 500 个文件都解压出来也一样。
 
-云端单次识别上限是 **200 页**，超过就必须分块。界面把这件事**摊开给用户**：
+所以 `TicketSplitter.Launcher` 采用自解压方案：
 
-- 自动按上限均分（400 页 → 2 块 × 200 页），并显示每块的页范围与页数
-- 每块带「再切一刀」「与下一块合并」，切点完全由用户掌控
-- 实时校验：超出页数上限、超出 200MB 上传上限、切点乱序或没覆盖到最后一页，都会直接列出来并禁用「开始识别」
-- 各块**并行**上传/轮询/下载（默认并发 3）
+1. 正常发布主程序目录（自包含 .NET + Windows App SDK）
+2. 压成 `payload.zip` 作为**内嵌资源**（注意必须显式指定 `LogicalName`，
+   否则默认名是 `TicketSplitter.Launcher.payload.zip`，按 `payload.zip` 取会得到 null）
+3. 启动器自己用 `PublishSingleFile` 打成**一个 exe**
 
-### Token 的保存策略
-
-没有"本次是否记住"这种选择——**Token 一直是保存的**，用 DPAPI（当前用户作用域）加密后写入
-`%LOCALAPPDATA%\TicketSplitter\settings.json`，下次打开自动带上。
-
-只有一种情况会清掉它：**失效**。MinerU 返回 HTTP 401/403 或鉴权类错误码时，
-`MineruClient` 抛 `MineruAuthException`（区别于可重试的网络错误），应用立即清除本机保存的 Token
-并提示重新填写。解析设置里也有一个「清除」按钮可以手动清。
-
-这样设计的理由是：Token 失效时重试毫无意义，而其它任何失败都不应该让用户重填一遍。
-
-注意：400 页的文件把单一切点从 200 挪到 187 会让第二块变成 213 页而超限——**必须同时加一刀**，
-界面会明确报错而不是偷偷改回去。
-
-切点落在一张票中间也不影响结果：各块的识别结果按页号偏移合并成一份 content_list 后再切票，
-所以边界对切票是透明的。把切点开放出来，只是为了让你能按业务上的一批票来分块。
+首次运行时释放到 `%LOCALAPPDATA%\TicketSplitter\runtime\<版本>\`（实测约 1.3 秒），
+之后每次启动直接拉起主程序。目标机器不需要装 .NET 运行时，也不需要 Windows App Runtime。
 
 ---
 

@@ -2,12 +2,13 @@
 ================================================
 
 【运行】
-双击 TicketSplitter.exe 即可。
+就一个文件：TicketSplitter.exe，双击即可。
 
 本版本是「自包含」发布：目标机器
   · 不需要安装 .NET 运行时
   · 不需要安装 Windows App Runtime
-解压后直接运行。要求 64 位 Windows 10 1809 或更高。
+首次启动会花约 2 秒把内置文件释放到本机缓存，之后就快了。
+要求 64 位 Windows 10 1809 或更高。
 
 
 【五步流程】
@@ -35,17 +36,6 @@ Token 会用 DPAPI（当前用户）加密一直保存在本机，
   <输出目录>\<票类型>\<区域>\ticket_NNN_<类型>_<区域>_<时间>_pageX-Y.pdf
 
 CSV 为 UTF-8 BOM，Excel 可直接双击打开。
-
-
-【命令行版】
-  TicketSplitter-CLI\ticketsplitter.exe analyze <pdf>
-      只看版式识别结果，不联网
-
-  TicketSplitter-CLI\ticketsplitter.exe split <pdf> --out <目录> [--token <Token>]
-      --layout auto|half|spread   强制版式
-      --reuse-parse               复用已有识别结果，不联网
-      --clean                     导出前清空上次的票类型目录
-      --retries <n>               单块最大重试次数，默认 4
 
 
 【本机数据】

@@ -7,3 +7,5 @@ spike/
 TestResults/
 publish/
 dist/
+build/
+src/TicketSplitter.Launcher/payload.zip
