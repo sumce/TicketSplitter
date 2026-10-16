@@ -5,3 +5,5 @@ spike/
 *.user
 *.suo
 TestResults/
+publish/
+dist/

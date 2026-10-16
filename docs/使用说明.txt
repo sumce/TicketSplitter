@@ -1,0 +1,59 @@
+﻿作业票切分工具 — 使用说明
+================================================
+
+【运行】
+双击 TicketSplitter.exe 即可。
+
+本版本是「自包含」发布：目标机器
+  · 不需要安装 .NET 运行时
+  · 不需要安装 Windows App Runtime
+解压后直接运行。要求 64 位 Windows 10 1809 或更高。
+
+
+【五步流程】
+  ① 提交 PDF     拖入或点选扫描件，也可以点「最近打开」里的卡片
+  ② 选择样式     确认这份扫描件是「每页一张票」还是「一面两页（左右 / 上下）」
+                 程序会自动判断并用「推荐」标出，右侧用第 1 页做切开前后对照
+                 判断不对可以改选，或点「添加样式…」自己定义一种
+  ③ 切开         只有「一面两页」才会出现这一步，按中线拆成单页
+                 例：38 页 → 切开后 76 页
+  ④ MinerU 识别  填 Token 后点「开始识别」
+                 超过 200 页会自动分块并并行解析；每块可「再切一刀」「与下一块合并」
+  ⑤ 核对导出     逐张核对票边界（票与页面双向联动），再导出
+
+
+【需要联网】
+第 ④ 步调用 MinerU 云端识别，需要一个 Token。
+Token 从 https://mineru.net 获取。
+
+Token 会用 DPAPI（当前用户）加密一直保存在本机，
+下次打开自动带上；只有失效时才会被自动清除并提示重填。
+
+
+【输出】
+  <输出目录>\作业票清单.csv
+  <输出目录>\<票类型>\<区域>\ticket_NNN_<类型>_<区域>_<时间>_pageX-Y.pdf
+
+CSV 为 UTF-8 BOM，Excel 可直接双击打开。
+
+
+【命令行版】
+  TicketSplitter-CLI\ticketsplitter.exe analyze <pdf>
+      只看版式识别结果，不联网
+
+  TicketSplitter-CLI\ticketsplitter.exe split <pdf> --out <目录> [--token <Token>]
+      --layout auto|half|spread   强制版式
+      --reuse-parse               复用已有识别结果，不联网
+      --clean                     导出前清空上次的票类型目录
+      --retries <n>               单块最大重试次数，默认 4
+
+
+【本机数据】
+  设置与 Token：%LOCALAPPDATA%\TicketSplitter\settings.json
+  中间文件：    %LOCALAPPDATA%\TicketSplitter\work\
+  （换回同一样式不会重复切开；识别结果可断点续跑）
+
+
+【产出体检】
+导出前会列出需要人工核对的票，例如「只有 1 页」这种切分残片。
+作业票必然含签字页与施工后检查页，单页票基本可以断定是切分出了问题。
