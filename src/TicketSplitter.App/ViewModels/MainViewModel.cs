@@ -24,13 +24,13 @@ public partial class MainViewModel : ObservableObject
     public static readonly (string Id, string Name, string Desc, SheetSplitMode Mode)[] BuiltInStyles =
     [
         ("single", "每页一张票",
-            "一页 PDF 就是一张票的一页（半幅扫描），不需要切开，原样送去识别。",
+            "一页就是一张票的一页，不需要切开。",
             SheetSplitMode.None),
         ("lr", "一面两页 · 左右并排",
-            "一页 PDF 左右各排了一张票（横版整版扫描）。先按中线拆成左右两页，再送去识别。",
+            "一页左右各一张票，横版整版扫描。先从中间拆开。",
             SheetSplitMode.LeftRight),
         ("tb", "一面两页 · 上下排列",
-            "一页 PDF 上下各排了一张票（竖版 A4，两张 A5 叠放）。先按中线拆成上下两页，再送去识别。",
+            "一页上下各一张票，竖版 A4 叠放。先从中间拆开。",
             SheetSplitMode.TopBottom),
     ];
 
@@ -60,7 +60,8 @@ public partial class MainViewModel : ObservableObject
         ReuseExistingParse = _settings.ReuseExistingParse;
         OutputDir = _settings.LastOutputDir ?? string.Empty;
 
-        foreach (var f in _settings.RecentFiles.Where(File.Exists).Take(5)) RecentFiles.Add(f);
+        foreach (var f in _settings.RecentFiles.Where(File.Exists).Take(5))
+            RecentFiles.Add(new RecentFileViewModel(f));
 
         RebuildSteps();
         UpdateNavigation();
@@ -76,7 +77,7 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<TicketRowViewModel> Tickets { get; } = [];
     public ObservableCollection<PageThumbViewModel> Pages { get; } = [];
     public ObservableCollection<string> WarningList { get; } = [];
-    public ObservableCollection<string> RecentFiles { get; } = [];
+    public ObservableCollection<RecentFileViewModel> RecentFiles { get; } = [];
 
     // ==================== 工作流 ====================
 
@@ -134,6 +135,19 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _splitResultPages;
     [ObservableProperty] private string _splitSourceLabel = string.Empty;
     [ObservableProperty] private string _splitResultLabel = string.Empty;
+
+    // ==================== 分块 ====================
+
+    public ObservableCollection<ChunkRowViewModel> Chunks { get; } = [];
+    public ObservableCollection<string> ChunkProblems { get; } = [];
+
+    [ObservableProperty] private bool _needsChunking;
+    [ObservableProperty] private string _chunkSummary = string.Empty;
+    [ObservableProperty] private bool _hasChunkProblems;
+    [ObservableProperty] private int _maxPagesPerChunk = 200;
+
+    /// <summary>每块的结束页（1 基含），用户可增删改。</summary>
+    private List<int> _chunkEnds = [];
 
     // ==================== 解析 ====================
 
@@ -210,6 +224,8 @@ public partial class MainViewModel : ObservableObject
             SplitResultPages = _sourcePageCount;
             SplitSummary = $"该样式不需要切开，{_sourcePageCount} 页将原样送去识别。";
             SplitDone = true;
+            _chunkEnds = [];
+            RebuildChunks();
         }
 
         RefreshSplitLabels();
@@ -283,7 +299,8 @@ public partial class MainViewModel : ObservableObject
         _settings.Save();
 
         RecentFiles.Clear();
-        foreach (var f in _settings.RecentFiles.Where(File.Exists)) RecentFiles.Add(f);
+        foreach (var f in _settings.RecentFiles.Where(File.Exists).Take(5))
+            RecentFiles.Add(new RecentFileViewModel(f));
     }
 
     /// <summary>添加一个自定义样式（由"添加样式"对话框调用）。</summary>
@@ -328,6 +345,82 @@ public partial class MainViewModel : ObservableObject
         if (Directory.Exists(dir)) PickerHelper.RevealInExplorer(dir);
     }
 
+    /// <summary>在指定块的中间再加一刀，把它一分为二。</summary>
+    [RelayCommand]
+    private void SplitChunk(ChunkRowViewModel? row)
+    {
+        if (row is null) return;
+        var i = row.Index - 1;
+        if (i < 0 || i >= _chunkEnds.Count) return;
+
+        var start = i == 0 ? 0 : _chunkEnds[i - 1];
+        var end = _chunkEnds[i];
+        if (end - start < 2) { StatusText = "这一块只有 1 页，切不动了"; return; }
+
+        _chunkEnds.Insert(i, start + (end - start) / 2);
+        RebuildChunks();
+        StatusText = $"已在第 {_chunkEnds[i]} 页后加了一刀";
+    }
+
+    /// <summary>把这一块与下一块合并（去掉它的结束切点）。</summary>
+    [RelayCommand]
+    private void MergeChunk(ChunkRowViewModel? row)
+    {
+        if (row is null) return;
+        var i = row.Index - 1;
+        if (i < 0 || i >= _chunkEnds.Count - 1) { StatusText = "最后一块没有可合并的下一块"; return; }
+
+        _chunkEnds.RemoveAt(i);
+        RebuildChunks();
+        StatusText = "已合并分块";
+    }
+
+    /// <summary>恢复按上限均分。</summary>
+    [RelayCommand]
+    private void ResetChunks()
+    {
+        _chunkEnds = ChunkPlanner.DefaultEnds(_workingPageCount, MaxPagesPerChunk);
+        RebuildChunks();
+        StatusText = "已恢复自动分块";
+    }
+
+    private void RebuildChunks()
+    {
+        Chunks.Clear();
+        ChunkProblems.Clear();
+
+        var total = _workingPageCount;
+        if (total <= 0) { NeedsChunking = false; ChunkSummary = string.Empty; HasChunkProblems = false; return; }
+
+        if (_chunkEnds.Count == 0 || _chunkEnds[^1] != total)
+            _chunkEnds = ChunkPlanner.DefaultEnds(total, MaxPagesPerChunk);
+
+        var boundaries = ChunkPlanner.FromEnds(_chunkEnds);
+        for (var i = 0; i < boundaries.Count; i++)
+        {
+            var b = boundaries[i];
+            Chunks.Add(new ChunkRowViewModel
+            {
+                Index = i + 1,
+                StartPage = b.StartPage,
+                EndPage = b.EndPageExclusive,
+                OverLimit = b.PageCount > MaxPagesPerChunk,
+                CanMerge = i < boundaries.Count - 1,
+            });
+        }
+
+        NeedsChunking = boundaries.Count > 1;
+        ChunkSummary = boundaries.Count == 1
+            ? $"共 {total} 页，未超过单次上限 {MaxPagesPerChunk} 页，单块解析。"
+            : $"共 {total} 页，超过单次上限 {MaxPagesPerChunk} 页，将分 {boundaries.Count} 块并行解析。";
+
+        var perPage = ChunkPlanner.EstimateMbPerPage(_workingPdf ?? SourcePath ?? string.Empty, total);
+        foreach (var p in ChunkPlanner.Validate(_chunkEnds, total, MaxPagesPerChunk, perPage, 200))
+            ChunkProblems.Add(p);
+
+        HasChunkProblems = ChunkProblems.Count > 0;
+    }
+
     [RelayCommand]
     private async Task StartParseAsync()
     {
@@ -367,7 +460,11 @@ public partial class MainViewModel : ObservableObject
                     else ProgressIsIndeterminate = true;
                 });
 
-                var result = await client.ParseAsync(_workingPdf, mineruDir, _workingPageCount, progress, _cts.Token);
+                if (_chunkEnds.Count == 0 || _chunkEnds[^1] != _workingPageCount)
+                    _chunkEnds = ChunkPlanner.DefaultEnds(_workingPageCount, MaxPagesPerChunk);
+
+                var boundaries = ChunkPlanner.FromEnds(_chunkEnds);
+                var result = await client.ParseAsync(_workingPdf, mineruDir, boundaries, progress, _cts.Token);
                 merged = result.MergedContentListPath;
             }
 
@@ -584,8 +681,8 @@ public partial class MainViewModel : ObservableObject
             CurrentStep = WorkflowStep.Layout;
 
             StatusText = analysis.SuggestedSplitMode == SheetSplitMode.None
-                ? $"已读取 {pageCount} 页，请确认样式"
-                : $"已读取 {pageCount} 页，识别为{analysis.Label}，请确认样式";
+                ? $"已读取 {pageCount} 页 · 判定「{analysis.Label}」，请确认样式"
+                : $"已读取 {pageCount} 页 · 判定「{analysis.Label}」，需要先切开";
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -597,6 +694,7 @@ public partial class MainViewModel : ObservableObject
             ProgressIsIndeterminate = false;
             ProgressValue = 0;
             IsBusy = false;
+            UpdateNavigation();   // IsBusy 变了，按钮可用状态必须重算，否则「下一步」会一直灰着
         }
     }
 
@@ -647,6 +745,7 @@ public partial class MainViewModel : ObservableObject
             _appliedMode = SheetSplitMode.None;
             SplitDone = true;
             RefreshSplitLabels();
+            RebuildChunks();
             UpdateNavigation();
             return;
         }
@@ -697,6 +796,7 @@ public partial class MainViewModel : ObservableObject
             _cts?.Dispose();
             _cts = null;
             RefreshSplitLabels();
+            RebuildChunks();
             UpdateNavigation();
         }
     }

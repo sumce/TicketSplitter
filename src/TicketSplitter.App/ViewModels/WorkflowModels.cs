@@ -18,6 +18,10 @@ public partial class LayoutStyleViewModel : ObservableObject
 
     public bool CanDelete => !BuiltIn;
 
+    public bool IsSingle => Mode == SheetSplitMode.None;
+    public bool IsLeftRight => Mode == SheetSplitMode.LeftRight;
+    public bool IsTopBottom => Mode == SheetSplitMode.TopBottom;
+
     [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private bool _isRecommended;
 

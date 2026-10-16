@@ -20,6 +20,9 @@ public sealed record SplitRequest
     /// <summary>跳过 MinerU 调用，复用 workDir/mineru 下已有的解析结果。</summary>
     public bool ReuseExistingParse { get; init; }
 
+    /// <summary>自定义切点（每块的结束页，1 基含）。为空时按 MaxPagesPerChunk 自动均分。</summary>
+    public IReadOnlyList<int>? ChunkEnds { get; init; }
+
     public string? Token { get; init; }
     public MineruOptions? MineruOptions { get; init; }
     public bool CleanOutput { get; init; }
@@ -101,8 +104,14 @@ public static class SplitPipeline
             {
                 Token = request.Token ?? Environment.GetEnvironmentVariable("MINERU_TOKEN") ?? "",
             };
+
+            var ends = request.ChunkEnds is { Count: > 0 } custom
+                ? [.. custom]
+                : ChunkPlanner.DefaultEnds(totalPages, options.MaxPagesPerChunk);
+            var boundaries = ChunkPlanner.FromEnds(ends);
+
             using var client = new MineruClient(options);
-            var result = await client.ParseAsync(workingPdf, mineruDir, totalPages, progress, ct)
+            var result = await client.ParseAsync(workingPdf, mineruDir, boundaries, progress, ct)
                 .ConfigureAwait(false);
             merged = result.MergedContentListPath;
         }

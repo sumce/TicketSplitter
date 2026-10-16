@@ -19,8 +19,11 @@ public sealed record MineruOptions
     /// <summary>单次上传的硬限制（MB）。MinerU 侧为 200MB。</summary>
     public double MaxUploadMb { get; init; } = 200;
 
-    /// <summary>单块最大页数。</summary>
-    public int MaxPagesPerChunk { get; init; } = 180;
+    /// <summary>云端单次识别的页数上限。超出就必须分块。</summary>
+    public int MaxPagesPerChunk { get; init; } = 200;
+
+    /// <summary>同时最多跑几个分块。分块彼此独立，可以并行上传/轮询/下载。</summary>
+    public int MaxParallelChunks { get; init; } = 3;
 
     /// <summary>单个分块的最大重试次数。这是老流水线最缺的能力。</summary>
     public int MaxRetries { get; init; } = 4;

@@ -11,6 +11,12 @@ public sealed partial class LayoutStep : UserControl
 
     private MainViewModel? Vm => DataContext as MainViewModel;
 
+    private void OnStyleTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+    {
+        if (Vm is null) return;
+        if (sender is FrameworkElement { Tag: LayoutStyleViewModel style }) Vm.SelectedStyle = style;
+    }
+
     private async void OnAddStyleClick(object sender, RoutedEventArgs e)
     {
         if (Vm is null || XamlRoot is null) return;

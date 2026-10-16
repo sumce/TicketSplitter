@@ -4,46 +4,106 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid RowDefinitions="Auto,*" RowSpacing="14">
 
-        <StackPanel Grid.Row="0" Spacing="4">
-            <TextBlock Text="交给 MinerU 识别" FontSize="16" FontWeight="SemiBold" />
+        <StackPanel Grid.Row="0" Spacing="3">
+            <TextBlock Text="交给 MinerU 识别" FontSize="20" FontWeight="SemiBold" />
             <TextBlock Style="{StaticResource CaptionStyle}"
-                       Text="识别的作用是找出每页上的票标题（承揽商／高处／动火作业申请表），据此确定每张票的起止页。送上去的是上一步切开后的文件。" />
+                       Text="识别的作用是找出每页上的票标题，据此确定每张票的起止页。送上去的是上一步切开后的文件。" />
         </StackPanel>
 
-        <Grid Grid.Row="1" ColumnDefinitions="*,380" ColumnSpacing="14" VerticalAlignment="Top">
+        <Grid Grid.Row="1" ColumnDefinitions="*,380" ColumnSpacing="14">
 
-            <Border Grid.Column="0" Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="12">
-                    <PasswordBox Header="MinerU Token" Password="{Binding Token, Mode=TwoWay}"
-                                 PlaceholderText="粘贴 Token，或使用环境变量 MINERU_TOKEN" />
-                    <CheckBox Content="记住 Token（DPAPI 加密保存在本机）"
-                              IsChecked="{Binding RememberToken, Mode=TwoWay}" />
-                    <CheckBox Content="复用已有识别结果（不联网，跳过 MinerU 调用）"
-                              IsChecked="{Binding ReuseExistingParse, Mode=TwoWay}"
-                              IsEnabled="{Binding CanReuseExisting}" />
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                        <Button Grid.Column="0" Content="开始识别" HorizontalAlignment="Stretch"
-                                Style="{StaticResource AccentButtonStyle}"
-                                Command="{Binding StartParseCommand}" />
-                        <Button Grid.Column="1" Content="取消" HorizontalAlignment="Stretch"
-                                IsEnabled="{Binding IsBusy}" Command="{Binding CancelCommand}" />
-                    </Grid>
-                    <ProgressBar Maximum="100" Value="{Binding ProgressValue}"
-                                 IsIndeterminate="{Binding ProgressIsIndeterminate}" />
-                    <TextBlock Text="{Binding StatusText}" Style="{StaticResource CaptionStyle}" />
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="12" MaxWidth="860" HorizontalAlignment="Left">
+
+                    <Border Style="{StaticResource CardStyle}" Padding="16">
+                        <StackPanel Spacing="10">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="分块解析" Style="{StaticResource PanelTitleStyle}" />
+                                <Button Grid.Column="1" Content="恢复自动分块" FontSize="11" Padding="8,2"
+                                        Command="{Binding ResetChunksCommand}"
+                                        Visibility="{Binding NeedsChunking, Converter={StaticResource BoolToVis}}" />
+                            </Grid>
+
+                            <TextBlock Text="{Binding ChunkSummary}" TextWrapping="Wrap" FontSize="12.5" />
+
+                            <ItemsControl ItemsSource="{Binding Chunks}"
+                                          Visibility="{Binding NeedsChunking, Converter={StaticResource BoolToVis}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderThickness="0,0,0,1" Padding="10,8"
+                                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                                            <Grid ColumnSpacing="10" ColumnDefinitions="Auto,150,Auto,*,Auto,Auto">
+                                                <TextBlock Grid.Column="0" Text="{Binding Title}" FontSize="12"
+                                                           FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Range}" FontSize="12"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding PageCountText}"
+                                                           FontSize="12" Opacity="0.65" VerticalAlignment="Center" />
+                                                <Button Grid.Column="4" Content="再切一刀" FontSize="11" Padding="8,2"
+                                                        Click="OnSplitChunkClick" Tag="{Binding}" />
+                                                <Button Grid.Column="5" Content="与下一块合并" FontSize="11" Padding="8,2"
+                                                        Click="OnMergeChunkClick" Tag="{Binding}"
+                                                        IsEnabled="{Binding CanMerge}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <InfoBar IsOpen="{Binding HasChunkProblems}" IsClosable="False" Severity="Error"
+                                     Title="切点有问题，请调整">
+                                <InfoBar.Content>
+                                    <ItemsControl ItemsSource="{Binding ChunkProblems}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap"
+                                                           Margin="0,0,0,3" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </InfoBar.Content>
+                            </InfoBar>
+
+                            <TextBlock Style="{StaticResource CaptionStyle}"
+                                       Text="切点落在一张票中间也不影响结果：各块的识别结果会按页号偏移合并后再切票。留在这里只是为了让你按业务上的一批票来分块。" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Padding="16">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="识别设置" Style="{StaticResource PanelTitleStyle}" />
+                            <PasswordBox Header="MinerU Token" Password="{Binding Token, Mode=TwoWay}"
+                                         PlaceholderText="粘贴 Token，或使用环境变量 MINERU_TOKEN" />
+                            <CheckBox Content="记住 Token（DPAPI 加密保存在本机）"
+                                      IsChecked="{Binding RememberToken, Mode=TwoWay}" />
+                            <CheckBox Content="复用已有识别结果（不联网，跳过 MinerU 调用）"
+                                      IsChecked="{Binding ReuseExistingParse, Mode=TwoWay}"
+                                      IsEnabled="{Binding CanReuseExisting}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="开始识别" MinWidth="150"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        IsEnabled="{Binding HasChunkProblems, Converter={StaticResource BoolToVisInv}}"
+                                        Command="{Binding StartParseCommand}" />
+                                <Button Content="取消" MinWidth="72"
+                                        IsEnabled="{Binding IsBusy}" Command="{Binding CancelCommand}" />
+                            </StackPanel>
+                            <ProgressBar Maximum="100" Value="{Binding ProgressValue}"
+                                         IsIndeterminate="{Binding ProgressIsIndeterminate}" />
+                            <TextBlock Text="{Binding StatusText}" Style="{StaticResource CaptionStyle}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-            </Border>
+            </ScrollViewer>
 
-            <Border Grid.Column="1" Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="8">
+            <Border Grid.Column="1" Style="{StaticResource CardStyle}" Padding="16" VerticalAlignment="Top">
+                <StackPanel Spacing="10">
                     <TextBlock Text="本次识别的输入" Style="{StaticResource PanelTitleStyle}" />
-                    <TextBlock Text="{Binding SourceName}" FontSize="12" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding SourceName}" FontSize="12.5" FontWeight="SemiBold"
                                TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding SplitSummary}" Style="{StaticResource CaptionStyle}" />
                     <TextBlock Text="{Binding TicketSummary}" Style="{StaticResource CaptionStyle}" />
                     <InfoBar IsOpen="{Binding HasWarnings}" IsClosable="False" Severity="Warning"
-                             Title="{Binding WarningHeader}"
-                             Message="识别完成后可在下一步逐张核对。" />
+                             Title="{Binding WarningHeader}" Message="识别完成后可在下一步逐张核对。" />
                 </StackPanel>
             </Border>
         </Grid>

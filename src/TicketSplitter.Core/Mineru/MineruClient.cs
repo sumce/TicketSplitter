@@ -27,55 +27,88 @@ public sealed class MineruClient : IDisposable
         _http.Timeout = Timeout.InfiniteTimeSpan;   // 由每个请求自己控制超时
     }
 
-    /// <summary>解析整份 PDF，返回合并后的 content_list.json 路径。</summary>
+    /// <summary>
+    /// 解析整份 PDF。分块彼此独立，按 MaxParallelChunks **并行**上传/轮询/下载；
+    /// 结果始终按分块顺序合并，保证每块的 page_idx 偏移正确，
+    /// 因此切点即使落在一张票中间也不会影响后续切票。
+    /// </summary>
     public async Task<ParseResult> ParseAsync(
         string pdfPath,
         string mineruDir,
-        int totalPages,
+        IReadOnlyList<ChunkBoundary> boundaries,
         IProgress<ParseProgress>? progress = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_options.Token))
             throw new MineruException("缺少 MinerU Token（请在设置里填写，或设置环境变量 MINERU_TOKEN）。");
+        if (boundaries.Count == 0)
+            throw new MineruException("分块计划为空。");
 
         Directory.CreateDirectory(mineruDir);
-        var state = ParseStateStore.Load(Path.Combine(mineruDir, StateFileName));
+        var statePath = Path.Combine(mineruDir, StateFileName);
+        var state = ParseStateStore.Load(statePath);
 
-        progress?.Report(new ParseProgress(ParseStage.Planning, 0, 0, "正在规划分块…"));
+        var totalPages = boundaries[^1].EndPageExclusive;
+        var parallel = Math.Clamp(_options.MaxParallelChunks, 1, 8);
 
-        var chunks = PdfChunker.Plan(pdfPath, totalPages, Path.Combine(mineruDir, "chunks"), _options);
-        progress?.Report(new ParseProgress(ParseStage.Planning, 0, chunks.Count,
-            chunks.Count == 1 ? $"共 {totalPages} 页，单块解析" : $"共 {totalPages} 页，分 {chunks.Count} 块解析"));
+        progress?.Report(new ParseProgress(ParseStage.Planning, 0, boundaries.Count,
+            boundaries.Count == 1
+                ? $"共 {totalPages} 页，单块解析"
+                : $"共 {totalPages} 页，分 {boundaries.Count} 块并行解析（并发 {parallel}）"));
 
-        var outcomes = new List<ChunkOutcome>();
+        var chunks = await Task.Run(
+            () => PdfChunker.Materialize(pdfPath, boundaries, Path.Combine(mineruDir, "chunks")), ct)
+            .ConfigureAwait(false);
 
-        for (var i = 0; i < chunks.Count; i++)
+        var outcomes = new ChunkOutcome?[chunks.Count];
+        using var gate = new SemaphoreSlim(parallel, parallel);
+        var stateLock = new object();
+
+        var tasks = chunks.Select(async (chunk, i) =>
         {
-            ct.ThrowIfCancellationRequested();
-            var chunk = chunks[i];
-            var resultDir = Path.Combine(mineruDir, Path.GetFileNameWithoutExtension(chunk.FileName));
-
-            // ---- 断点续跑：已有结果就直接复用 ----
-            if (state.IsCompleted(chunk) && TryFindContentList(resultDir) is { } cached)
+            await gate.WaitAsync(ct).ConfigureAwait(false);
+            try
             {
-                progress?.Report(new ParseProgress(ParseStage.Parsing, i + 1, chunks.Count,
-                    $"块 {i + 1}/{chunks.Count} 已有解析结果，跳过（断点续跑）", 100));
-                outcomes.Add(new ChunkOutcome(chunk, resultDir, ReusedFromCache: true, Attempts: 0));
-                continue;
-            }
+                var resultDir = Path.Combine(mineruDir, Path.GetFileNameWithoutExtension(chunk.FileName));
 
-            var outcome = await ParseChunkWithRetryAsync(chunk, resultDir, i, chunks.Count, progress, ct)
-                .ConfigureAwait(false);
-            outcomes.Add(outcome);
-            state.MarkCompleted(chunk, resultDir);
-            state.Save(Path.Combine(mineruDir, StateFileName));
+                // ---- 断点续跑：这一块已有结果就直接复用 ----
+                if (state.IsCompleted(chunk) && TryFindContentList(resultDir) is not null)
+                {
+                    progress?.Report(new ParseProgress(ParseStage.Parsing, i + 1, chunks.Count,
+                        $"块 {i + 1}/{chunks.Count} 已有解析结果，跳过（断点续跑）", 100));
+                    outcomes[i] = new ChunkOutcome(chunk, resultDir, ReusedFromCache: true, Attempts: 0);
+                    return;
+                }
+
+                outcomes[i] = await ParseChunkWithRetryAsync(chunk, resultDir, i, chunks.Count, progress, ct)
+                    .ConfigureAwait(false);
+
+                lock (stateLock)
+                {
+                    state.MarkCompleted(chunk, resultDir);
+                    state.Save(statePath);
+                }
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }).ToArray();
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        var ordered = new List<ChunkOutcome>(chunks.Count);
+        foreach (var o in outcomes)
+        {
+            if (o is null) throw new MineruException("有分块未产出结果。");
+            ordered.Add(o);
         }
 
         progress?.Report(new ParseProgress(ParseStage.Merging, chunks.Count, chunks.Count, "正在合并解析结果…"));
-        var merged = MergeContentLists(mineruDir, outcomes);
+        var merged = MergeContentLists(mineruDir, ordered);
         progress?.Report(new ParseProgress(ParseStage.Done, chunks.Count, chunks.Count, "解析完成", 100));
 
-        return new ParseResult(merged, outcomes, totalPages);
+        return new ParseResult(merged, ordered, totalPages);
     }
 
     private async Task<ChunkOutcome> ParseChunkWithRetryAsync(

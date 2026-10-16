@@ -2,45 +2,33 @@ using TicketSplitter.Core.Pdf;
 
 namespace TicketSplitter.Core.Mineru;
 
-/// <summary>
-/// 分块策略。页数上限之外还按体积估算——扫描件单页可能几 MB，
-/// 180 页很容易超过 MinerU 的 200MB 上传上限（老流水线就出现过 155MB 的块）。
-/// </summary>
+/// <summary>把源 PDF 按切点落成实际的分块文件。</summary>
 public static class PdfChunker
 {
-    /// <summary>体积安全余量：只用到上限的 90%。</summary>
-    private const double SafetyFactor = 0.9;
-
-    public static int EstimatePagesPerChunk(string path, int totalPages, MineruOptions options)
+    /// <summary>
+    /// 按给定切点生成分块文件；只有一块时直接复用源文件，不产生副本。
+    /// 体积与页数的合法性由 ChunkPlanner.Validate 负责，这里不再偷偷改切点。
+    /// </summary>
+    public static IReadOnlyList<ChunkInfo> Materialize(
+        string path, IReadOnlyList<ChunkBoundary> boundaries, string chunkDir)
     {
-        if (totalPages <= 0) return 1;
+        if (boundaries.Count == 0)
+            throw new ArgumentException("分块计划为空", nameof(boundaries));
 
-        var sizeMb = new FileInfo(path).Length / 1048576.0;
-        var perPageMb = sizeMb / totalPages;
-        if (perPageMb <= 0) return options.MaxPagesPerChunk;
-
-        var bySize = (int)(options.MaxUploadMb * SafetyFactor / perPageMb);
-        return Math.Max(1, Math.Min(options.MaxPagesPerChunk, bySize));
-    }
-
-    /// <summary>生成分块计划；单块时直接复用源文件，不产生副本。</summary>
-    public static IReadOnlyList<ChunkInfo> Plan(string path, int totalPages, string chunkDir, MineruOptions options)
-    {
-        var perChunk = EstimatePagesPerChunk(path, totalPages, options);
-        if (perChunk >= totalPages)
-            return [new ChunkInfo(path, 0, totalPages)];
+        if (boundaries.Count == 1)
+            return [new ChunkInfo(path, 0, boundaries[0].EndPageExclusive)];
 
         Directory.CreateDirectory(chunkDir);
         var stem = Path.GetFileNameWithoutExtension(path);
-        var chunks = new List<ChunkInfo>();
+        var chunks = new List<ChunkInfo>(boundaries.Count);
 
         using var source = PdfSource.Open(path);
-        for (var start = 0; start < totalPages; start += perChunk)
+        for (var i = 0; i < boundaries.Count; i++)
         {
-            var end = Math.Min(start + perChunk, totalPages);
-            var file = Path.Combine(chunkDir, $"{stem}_part{chunks.Count + 1}_p{start + 1}-{end}.pdf");
-            source.WriteRange(start, end, file);
-            chunks.Add(new ChunkInfo(file, start, end));
+            var b = boundaries[i];
+            var file = Path.Combine(chunkDir, $"{stem}_part{i + 1}_p{b.StartPage1Based}-{b.EndPageExclusive}.pdf");
+            source.WriteRange(b.StartPage, b.EndPageExclusive, file);
+            chunks.Add(new ChunkInfo(file, b.StartPage, b.EndPageExclusive));
         }
         return chunks;
     }
