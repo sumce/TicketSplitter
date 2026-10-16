@@ -38,6 +38,7 @@ public partial class MainViewModel : ObservableObject
 
         Token = _settings.ReadToken() ?? Environment.GetEnvironmentVariable("MINERU_TOKEN") ?? string.Empty;
         RememberToken = _settings.RememberToken;
+        ReuseExistingParse = _settings.ReuseExistingParse;
         OutputDir = _settings.LastOutputDir ?? string.Empty;
         CleanOutput = true;
 
@@ -53,15 +54,31 @@ public partial class MainViewModel : ObservableObject
     // ---------------- 源文件 / 版式 ----------------
     [ObservableProperty] private string? _sourcePath;
     [ObservableProperty] private string _sourceInfo = "尚未选择文件";
+    [ObservableProperty] private string _sourceName = string.Empty;
+    [ObservableProperty] private string _sourceMeta = string.Empty;
+    [ObservableProperty] private string _layoutShort = string.Empty;
+    [ObservableProperty] private string _selectedPageLabel = "未选中页面";
+    [ObservableProperty] private bool _canEditBoundary;
     [ObservableProperty] private string _layoutLabel = string.Empty;
     [ObservableProperty] private string _layoutDetail = string.Empty;
     [ObservableProperty] private string _layoutNotes = string.Empty;
     [ObservableProperty] private bool _hasLayout;
     [ObservableProperty] private bool _hasNotes;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NoSource))]
+    private bool _hasSource;
+
     [ObservableProperty] private int _layoutModeIndex;
+    [ObservableProperty] private bool _showPages = true;
+
+    public bool NoSource => !HasSource;
 
     // ---------------- 解析 ----------------
-    [ObservableProperty] private string _token = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TokenButtonText))]
+    private string _token = string.Empty;
+
+    public string TokenButtonText => string.IsNullOrWhiteSpace(Token) ? "设置 Token" : "Token 已设置";
     [ObservableProperty] private bool _rememberToken = true;
     [ObservableProperty] private bool _reuseExistingParse;
     [ObservableProperty] private bool _canReuseExisting;
@@ -86,6 +103,14 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _lastExportInfo = string.Empty;
     [ObservableProperty] private bool _hasExport;
 
+    partial void OnSelectedPageChanged(PageThumbViewModel? value)
+    {
+        SelectedPageLabel = value is null ? "未选中页面" : $"选中 第 {value.PageNumber} 页";
+        CanEditBoundary = value is not null && HasTickets;
+    }
+
+    partial void OnHasTicketsChanged(bool value) => CanEditBoundary = value && SelectedPage is not null;
+
     partial void OnLayoutModeIndexChanged(int value)
     {
         if (SourcePath is null || IsBusy) return;
@@ -93,6 +118,12 @@ public partial class MainViewModel : ObservableObject
     }
 
     partial void OnTokenChanged(string value) => PersistToken();
+
+    partial void OnReuseExistingParseChanged(bool value)
+    {
+        _settings.ReuseExistingParse = value;
+        _settings.Save();
+    }
     partial void OnRememberTokenChanged(bool value) => PersistToken();
 
     private void PersistToken()
@@ -342,13 +373,19 @@ public partial class MainViewModel : ObservableObject
             _analysis = analysis;
             _sourcePageCount = pageCount;
             SourceInfo = $"{Path.GetFileName(path)}\n{new FileInfo(path).Length / 1048576.0:F1} MB · {pageCount} 页";
+            SourceName = Path.GetFileName(path);
+            SourceMeta = $"{new FileInfo(path).Length / 1048576.0:F1} MB · {pageCount} 页";
             LayoutLabel = analysis.Label;
             LayoutDetail = analysis.Detail;
             LayoutNotes = string.Join("\n", analysis.Notes);
             HasNotes = analysis.Notes.Count > 0;
             HasLayout = true;
+            HasSource = true;
 
             await PrepareWorkingPdfAsync(path, analysis, ct);
+            LayoutShort = _workingPageCount != _sourcePageCount
+                ? $"整版 → 拆半幅（{_workingPageCount} 页）"
+                : $"半幅（{_workingPageCount} 页）";
 
             Tickets.Clear();
             WarningList.Clear();
@@ -465,6 +502,11 @@ public partial class MainViewModel : ObservableObject
             .GroupBy(w => w.TicketIndex)
             .ToDictionary(g => g.Key, g => string.Join("；", g.Select(x => x.Message)));
 
+        var shortIssues = warnings
+            .Where(w => w.TicketIndex > 0)
+            .GroupBy(w => w.TicketIndex)
+            .ToDictionary(g => g.Key, g => string.Join("、", g.Select(x => ShortIssue(x.Issue)).Distinct()));
+
         Tickets.Clear();
         foreach (var t in _current)
         {
@@ -480,6 +522,7 @@ public partial class MainViewModel : ObservableObject
                 PageCount = t.PageCount,
                 HasIssue = hasIssue,
                 IssueText = issue ?? "",
+                IssueShort = shortIssues.TryGetValue(t.Index, out var s) ? s : "",
                 TypeBrush = BrushFor(t.Type),
                 StartPageIndex = t.StartPage,
                 EndPageIndex = t.EndPage,
@@ -525,6 +568,17 @@ public partial class MainViewModel : ObservableObject
             }
         }
     }
+
+    private static string ShortIssue(TicketIssue issue) => issue switch
+    {
+        TicketIssue.SinglePage => "单页残片",
+        TicketIssue.MissingTime => "缺施工时间",
+        TicketIssue.UnknownArea => "缺施工区域",
+        TicketIssue.UnknownType => "票类型未知",
+        TicketIssue.PageGap => "页缺口",
+        TicketIssue.PageOverlap => "页重叠",
+        _ => issue.ToString(),
+    };
 
     private static Brush BrushFor(string type) => type switch
     {

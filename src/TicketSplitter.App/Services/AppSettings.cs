@@ -21,6 +21,7 @@ public sealed class AppSettings
     [JsonPropertyName("lastSourcePath")] public string? LastSourcePath { get; set; }
     [JsonPropertyName("lastOutputDir")] public string? LastOutputDir { get; set; }
     [JsonPropertyName("rememberToken")] public bool RememberToken { get; set; }
+    [JsonPropertyName("reuseExistingParse")] public bool ReuseExistingParse { get; set; }
 
     public static AppSettings Load()
     {

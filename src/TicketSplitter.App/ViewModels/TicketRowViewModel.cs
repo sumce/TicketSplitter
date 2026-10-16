@@ -24,6 +24,7 @@ public partial class TicketRowViewModel : ObservableObject
     [ObservableProperty] private int _pageCount;
     [ObservableProperty] private bool _hasIssue;
     [ObservableProperty] private string _issueText = string.Empty;
+    [ObservableProperty] private string _issueShort = string.Empty;
     [ObservableProperty] private Brush? _typeBrush;
 
     public string PageRange => $"{StartPage}-{EndPage}";
