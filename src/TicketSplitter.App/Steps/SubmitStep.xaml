@@ -1,0 +1,36 @@
+<UserControl
+    x:Class="TicketSplitter.App.Steps.SubmitStep"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid ColumnDefinitions="*" RowDefinitions="*,Auto">
+        <Border Grid.Row="0" Margin="0,0,0,12" CornerRadius="10"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                AllowDrop="True" DragOver="OnDragOver" Drop="OnDrop">
+            <StackPanel Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="560">
+                <FontIcon Glyph="&#xE8E5;" FontSize="46"
+                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                <TextBlock Text="把扫描件作业票 PDF 拖到这里" FontSize="20" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+                <TextBlock TextAlignment="Center" Opacity="0.7" TextWrapping="Wrap"
+                           Text="支持图像型扫描件。选好文件后，下一步会让你确认它是「每页一张票」还是「一面两页、左右并排」，确认后才送去 MinerU 识别。" />
+                <Button Content="选择 PDF 文件…" HorizontalAlignment="Center" Padding="20,8"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Command="{Binding PickSourceCommand}" />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="1" Spacing="6">
+            <TextBlock Text="最近打开" FontSize="12" FontWeight="SemiBold" Opacity="0.7" />
+            <ItemsControl ItemsSource="{Binding RecentFiles}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <HyperlinkButton Content="{Binding}" HorizontalAlignment="Left" FontSize="12"
+                                         Click="OnRecentClick" Tag="{Binding}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </Grid>
+</UserControl>

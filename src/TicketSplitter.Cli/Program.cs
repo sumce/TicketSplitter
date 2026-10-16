@@ -70,7 +70,13 @@ static int Analyze(string[] a)
     Console.WriteLine($"版式      : {analysis.Label}");
     Console.WriteLine($"统计      : {analysis.Detail}");
     Console.WriteLine($"可见尺寸  : {source.Pages[0].VisibleWidth:F0} x {source.Pages[0].VisibleHeight:F0} pt（旋转 {source.Pages[0].NormalizedRotate}°）");
-    Console.WriteLine($"拆半幅后  : {(analysis.NeedsHalfSplit ? source.PageCount * 2 : source.PageCount)} 页");
+    Console.WriteLine($"建议样式  : {analysis.SuggestedSplitMode switch
+    {
+        SheetSplitMode.LeftRight => "一面两页 · 左右并排（先切开）",
+        SheetSplitMode.TopBottom => "一面两页 · 上下排列（先切开）",
+        _ => "每页一张票（不切开）",
+    }}");
+    Console.WriteLine($"处理后页数: {(analysis.NeedsSplit ? source.PageCount * 2 : source.PageCount)} 页");
     foreach (var note in analysis.Notes) Console.WriteLine("提示      : " + note);
     return 0;
 }

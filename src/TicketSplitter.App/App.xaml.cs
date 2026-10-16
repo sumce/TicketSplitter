@@ -4,14 +4,15 @@ namespace TicketSplitter.App;
 
 public partial class App : Application
 {
-    private Window? _window;
+    /// <summary>主窗口引用（步骤控件里选文件夹需要窗口句柄）。</summary>
+    public static Window? Host { get; private set; }
 
     public App() => InitializeComponent();
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         var window = new MainWindow();
-        _window = window;
+        Host = window;
         window.Activate();
     }
 }

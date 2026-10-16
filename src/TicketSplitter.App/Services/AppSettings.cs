@@ -10,6 +10,9 @@ namespace TicketSplitter.App.Services;
 /// 因此落到 %LOCALAPPDATA%\TicketSplitter\settings.json。
 /// Token 用 DPAPI（当前用户作用域）加密后落盘，不明文保存。
 /// </summary>
+/// <summary>用户自定义的样式（持久化到 settings.json）。</summary>
+public sealed record StyleRecord(string Name, string Description, TicketSplitter.Core.Pdf.SheetSplitMode Mode);
+
 public sealed class AppSettings
 {
     private static readonly string DataDir = Path.Combine(
@@ -23,12 +26,19 @@ public sealed class AppSettings
     [JsonPropertyName("rememberToken")] public bool RememberToken { get; set; }
     [JsonPropertyName("reuseExistingParse")] public bool ReuseExistingParse { get; set; }
 
+    /// <summary>用户自己添加的样式。</summary>
+    [JsonPropertyName("customStyles")] public List<StyleRecord> CustomStyles { get; set; } = [];
+
+    /// <summary>最近提交过的文件。</summary>
+    [JsonPropertyName("recentFiles")] public List<string> RecentFiles { get; set; } = [];
+
     public static AppSettings Load()
     {
         try
         {
             if (File.Exists(SettingsPath))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath)) ?? new AppSettings();
+                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath),
+                    new JsonSerializerOptions { Converters = { new JsonStringEnumConverter() } }) ?? new AppSettings();
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -42,7 +52,12 @@ public sealed class AppSettings
         try
         {
             Directory.CreateDirectory(DataDir);
-            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Converters = { new JsonStringEnumConverter() },
+            };
+            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, options));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

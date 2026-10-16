@@ -1,0 +1,51 @@
+<UserControl
+    x:Class="TicketSplitter.App.Steps.ParseStep"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid RowDefinitions="Auto,*" RowSpacing="14">
+
+        <StackPanel Grid.Row="0" Spacing="4">
+            <TextBlock Text="交给 MinerU 识别" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Style="{StaticResource CaptionStyle}"
+                       Text="识别的作用是找出每页上的票标题（承揽商／高处／动火作业申请表），据此确定每张票的起止页。送上去的是上一步切开后的文件。" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,380" ColumnSpacing="14" VerticalAlignment="Top">
+
+            <Border Grid.Column="0" Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="12">
+                    <PasswordBox Header="MinerU Token" Password="{Binding Token, Mode=TwoWay}"
+                                 PlaceholderText="粘贴 Token，或使用环境变量 MINERU_TOKEN" />
+                    <CheckBox Content="记住 Token（DPAPI 加密保存在本机）"
+                              IsChecked="{Binding RememberToken, Mode=TwoWay}" />
+                    <CheckBox Content="复用已有识别结果（不联网，跳过 MinerU 调用）"
+                              IsChecked="{Binding ReuseExistingParse, Mode=TwoWay}"
+                              IsEnabled="{Binding CanReuseExisting}" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Grid.Column="0" Content="开始识别" HorizontalAlignment="Stretch"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Command="{Binding StartParseCommand}" />
+                        <Button Grid.Column="1" Content="取消" HorizontalAlignment="Stretch"
+                                IsEnabled="{Binding IsBusy}" Command="{Binding CancelCommand}" />
+                    </Grid>
+                    <ProgressBar Maximum="100" Value="{Binding ProgressValue}"
+                                 IsIndeterminate="{Binding ProgressIsIndeterminate}" />
+                    <TextBlock Text="{Binding StatusText}" Style="{StaticResource CaptionStyle}" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="本次识别的输入" Style="{StaticResource PanelTitleStyle}" />
+                    <TextBlock Text="{Binding SourceName}" FontSize="12" FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding SplitSummary}" Style="{StaticResource CaptionStyle}" />
+                    <TextBlock Text="{Binding TicketSummary}" Style="{StaticResource CaptionStyle}" />
+                    <InfoBar IsOpen="{Binding HasWarnings}" IsClosable="False" Severity="Warning"
+                             Title="{Binding WarningHeader}"
+                             Message="识别完成后可在下一步逐张核对。" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

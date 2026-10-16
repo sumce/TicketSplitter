@@ -70,26 +70,70 @@ public sealed class PdfSource : IDisposable
         dst.Save(destPath);
     }
 
-    /// <summary>导出指定页号的半幅（每页两张），用于把整版扫描件拆成单页。</summary>
-    public int WriteHalves(string destPath, IProgress<int>? progress = null, CancellationToken ct = default)
+    /// <summary>把某一页按样式拆成一个小的预览 PDF（1~2 页），用于样式预览。</summary>
+    public void WritePageSplit(int pageIndex, SheetSplitMode mode, string destPath)
     {
+        if (pageIndex < 0 || pageIndex >= PageCount)
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+
         using var dst = new PdfDocument();
-        var written = 0;
-        for (var i = 0; i < PageCount; i++)
+        var page = _reader.Pages[pageIndex];
+
+        if (mode == SheetSplitMode.None)
         {
-            ct.ThrowIfCancellationRequested();
-            var page = _reader.Pages[i];
-            var (first, second) = HalfSheetSplitter.HalvesOf(Pages[i]);
-            foreach (var box in new[] { first, second })
+            dst.AddPage(page);
+        }
+        else
+        {
+            foreach (var box in SheetSplitter.Split(Pages[pageIndex], mode))
             {
                 var np = dst.AddPage(page);
                 np.CropBox = new PdfSharp.Pdf.PdfRectangle(
                     new PdfSharp.Drawing.XPoint(box.X1, box.Y1),
                     new PdfSharp.Drawing.XSize(box.Width, box.Height));
+            }
+        }
+
+        EnsureDirectory(destPath);
+        dst.Save(destPath);
+    }
+
+    /// <summary>
+    /// 按样式导出：一面两页会拆成两页，None 则原样输出。
+    /// 用 AddPage 复用同一源页并只改 CropBox，图片 XObject 不会翻倍。
+    /// </summary>
+    public int WriteSplit(string destPath, SheetSplitMode mode,
+                          IProgress<int>? progress = null, CancellationToken ct = default)
+    {
+        using var dst = new PdfDocument();
+        var written = 0;
+
+        for (var i = 0; i < PageCount; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = _reader.Pages[i];
+
+            if (mode == SheetSplitMode.None)
+            {
+                // 不切分时不动 CropBox，避免给退化 CropBox 的扫描件凭空加上一个
+                dst.AddPage(page);
                 written++;
             }
+            else
+            {
+                foreach (var box in SheetSplitter.Split(Pages[i], mode))
+                {
+                    var np = dst.AddPage(page);
+                    np.CropBox = new PdfSharp.Pdf.PdfRectangle(
+                        new PdfSharp.Drawing.XPoint(box.X1, box.Y1),
+                        new PdfSharp.Drawing.XSize(box.Width, box.Height));
+                    written++;
+                }
+            }
+
             progress?.Report(i + 1);
         }
+
         EnsureDirectory(destPath);
         dst.Save(destPath);
         return written;

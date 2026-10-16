@@ -18,7 +18,8 @@ public class RealPdfLayoutTests
 
         Assert.Equal(400, src.PageCount);
         Assert.Equal(PdfLayout.HalfSheet, analysis.Layout);
-        Assert.False(analysis.NeedsHalfSplit);
+        Assert.False(analysis.NeedsSplit);
+        Assert.Equal(SheetSplitMode.None, analysis.SuggestedSplitMode);
     }
 
     [Fact]
@@ -30,7 +31,8 @@ public class RealPdfLayoutTests
         using var src = PdfSource.Open(path);
         var analysis = PdfLayoutAnalyzer.Analyze(src.Pages);
         Assert.Equal(PdfLayout.Spread, analysis.Layout);
-        Assert.True(analysis.NeedsHalfSplit);
+        Assert.True(analysis.NeedsSplit);
+        Assert.Equal(SheetSplitMode.LeftRight, analysis.SuggestedSplitMode);
 
         // 真实的退化 CropBox 必须被回退掉，否则可见尺寸会是 0
         Assert.All(src.Pages, p => Assert.True(p.VisibleWidth > 100));
@@ -38,7 +40,7 @@ public class RealPdfLayoutTests
         var outPath = Path.Combine(Path.GetTempPath(), $"ticketsplitter_test_{Guid.NewGuid():N}.pdf");
         try
         {
-            var written = src.WriteHalves(outPath);
+            var written = src.WriteSplit(outPath, SheetSplitMode.LeftRight);
             Assert.Equal(src.PageCount * 2, written);
 
             using var result = PdfSource.Open(outPath);

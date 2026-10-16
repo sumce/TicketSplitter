@@ -53,12 +53,13 @@ public static class SplitPipeline
         using var source = PdfSource.Open(request.SourcePdf);
         var analysis = PdfLayoutAnalyzer.Analyze(source.Pages);
 
-        var needsSplit = request.Layout switch
+        var mode = request.Layout switch
         {
-            LayoutMode.Spread => true,
-            LayoutMode.HalfSheet => false,
-            _ => analysis.Layout == PdfLayout.Spread,
+            LayoutMode.Spread => SheetSplitMode.LeftRight,
+            LayoutMode.HalfSheet => SheetSplitMode.None,
+            _ => analysis.SuggestedSplitMode,
         };
+        var needsSplit = mode != SheetSplitMode.None;
 
         string workingPdf = request.SourcePdf;
         int totalPages = source.PageCount;
@@ -70,7 +71,7 @@ public static class SplitPipeline
             if (!File.Exists(workingPdf))
             {
                 progress?.Report(new ParseProgress(ParseStage.Planning, 0, 0, "正在拆分整版为左右半幅…"));
-                totalPages = source.WriteHalves(workingPdf,
+                totalPages = source.WriteSplit(workingPdf, mode,
                     new Progress<int>(p => progress?.Report(new ParseProgress(ParseStage.Planning, 0, 0,
                         $"拆分半幅 {p}/{source.PageCount}", (int)(100.0 * p / source.PageCount)))));
             }

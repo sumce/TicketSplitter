@@ -50,7 +50,7 @@ public class PdfGeometryTests
     public void Halves_Of_Rotate270_Match_Real_Pipeline_Output()
     {
         var page = new PageInfo(0, A4, null, 270);
-        var (first, second) = HalfSheetSplitter.HalvesOf(page);
+        var (first, second) = SheetSplitter.HalvesOf(page);
 
         Assert.Equal(0, first.X1, 1);
         Assert.Equal(420.95, first.Y1, 1);
@@ -65,10 +65,43 @@ public class PdfGeometryTests
     }
 
     [Fact]
+    public void TopBottom_Of_Rotate0_Splits_Top_Then_Bottom()
+    {
+        var parts = SheetSplitter.Split(new PageInfo(0, A4, null, 0), SheetSplitMode.TopBottom);
+
+        Assert.Equal(2, parts.Count);
+        Assert.Equal(420.95, parts[0].Y1, 1);   // 先给显示靠上的
+        Assert.Equal(841.9, parts[0].Y2, 1);
+        Assert.Equal(0, parts[1].Y1, 1);
+        Assert.Equal(420.95, parts[1].Y2, 1);
+    }
+
+    [Fact]
+    public void TopBottom_Of_Rotate270_Splits_Along_X()
+    {
+        // /Rotate=270 时显示空间的"上下"对应未旋转空间的 x 轴
+        var parts = SheetSplitter.Split(new PageInfo(0, A4, null, 270), SheetSplitMode.TopBottom);
+
+        Assert.Equal(297.65, parts[0].X1, 1);   // 显示靠上 = 未旋转右半
+        Assert.Equal(595.3, parts[0].X2, 1);
+        Assert.Equal(0, parts[1].X1, 1);
+        Assert.Equal(297.65, parts[1].X2, 1);
+    }
+
+    [Fact]
+    public void Split_None_Returns_The_Whole_Page()
+    {
+        var parts = SheetSplitter.Split(new PageInfo(0, A4, null, 0), SheetSplitMode.None);
+
+        Assert.Single(parts);
+        Assert.Equal(A4, parts[0]);
+    }
+
+    [Fact]
     public void Halves_Of_Rotate0_Split_Left_Right()
     {
         var page = new PageInfo(0, A4, null, 0);
-        var (first, second) = HalfSheetSplitter.HalvesOf(page);
+        var (first, second) = SheetSplitter.HalvesOf(page);
 
         Assert.Equal(0, first.X1, 1);
         Assert.Equal(297.65, first.X2, 1);
