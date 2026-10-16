@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TicketSplitter.App/TicketSplitter.App.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="src/TicketSplitter.Cli/TicketSplitter.Cli.csproj" />
+    <Project Path="src/TicketSplitter.Core/TicketSplitter.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TicketSplitter.Core.Tests/TicketSplitter.Core.Tests.csproj" />
+  </Folder>
+</Solution>

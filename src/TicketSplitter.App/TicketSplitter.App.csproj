@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>TicketSplitter.App</RootNamespace>
+    <AssemblyName>TicketSplitter</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <!-- 关键：必须是 true。设 false 会走 MrtCore.PriGen.targets，
+         该目标硬编码从 VS 安装目录加载 Microsoft.Build.Packaging.Pri.Tasks.dll，
+         dotnet CLI 下没有这个 dll，直接 MSB4062 构建失败。 -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- MVVMTK0045 是 NativeAOT 场景的提示。本应用不做 AOT，且 XAML 用 x:Bind 直连属性，
+         不经过 WinRT 封送，因此显式关闭该提示，保持 0 警告构建。 -->
+    <NoWarn>$(NoWarn);MVVMTK0045</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.260224002" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TicketSplitter.Core\TicketSplitter.Core.csproj" />
+  </ItemGroup>
+
+</Project>
